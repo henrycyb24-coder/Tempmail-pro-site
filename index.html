@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tempmail-pro-site</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  margin:0;
+  font-family:system-ui, Arial;
+  background:#2e2e2e;
+  color:#fff;
+}
+header{
+  padding:15px;
+  text-align:center;
+  font-size:20px;
+  font-weight:bold;
+}
+.container{ padding:20px; }
+.card{
+  background:#3b3b3b;
+  border-radius:18px;
+  padding:20px;
+  text-align:center;
+}
+.email{
+  font-size:18px;
+  margin:10px 0;
+  word-break:break-all;
+}
+button{
+  width:100%;
+  padding:12px;
+  border:none;
+  border-radius:14px;
+  font-size:16px;
+  margin-top:10px;
+}
+.green{ background:#22c55e; color:#000; }
+.gray{ background:#555; color:#fff; }
+.inbox-item{
+  background:#444;
+  padding:12px;
+  border-radius:12px;
+  margin-bottom:10px;
+  cursor:pointer;
+}
+.bottom-nav{
+  position:fixed;
+  bottom:0;
+  left:0;
+  width:100%;
+  background:#1f1f1f;
+  display:flex;
+}
+.nav-btn{
+  flex:1;
+  text-align:center;
+  padding:12px;
+  cursor:pointer;
+}
+.nav-btn.active{
+  background:#22c55e;
+  color:#000;
+}
+.hidden{ display:none; }
+.whatsapp{
+  background:#25D366;
+  color:#000;
+  margin-top:20px;
+}
+small{ color:#aaa; }
+</style>
+</head>
+
+<body>
+
+<header>Temp Mail</header>
+
+<div class="container">
+
+<!-- EMAIL -->
+<div id="emailScreen" class="card">
+  <div style="font-size:50px">📧</div>
+  <div class="email" id="emailAddress">Loading...</div>
+  <small>Temporary Email Address</small>
+  <button class="green" onclick="copyEmail()">Copy Email</button>
+  <button class="gray" onclick="newMailbox()">Change</button>
+</div>
+
+<!-- INBOX -->
+<div id="inboxScreen" class="hidden">
+  <div class="card">
+    <h3>Inbox</h3>
+    <div id="messages">No messages</div>
+    <button class="gray" onclick="loadInbox()">Refresh</button>
+  </div>
+</div>
+
+<button class="whatsapp" onclick="joinWhatsApp()">Join us on WhatsApp</button>
+<p style="text-align:center;font-size:12px">By ＴＥＣＨ｜ＵＰＤＡＴＥＳ 💻🎭</p>
+
+</div>
+
+<div class="bottom-nav">
+  <div class="nav-btn active" onclick="showEmail()">📧 Email</div>
+  <div class="nav-btn" onclick="showInbox()">📥 Inbox</div>
+</div>
+
+<script>
+let provider = "1secmail";
+let login = "", domain = "";
+let mailtmToken = "", mailtmId = "";
+
+/* ---------- MAIL GENERATION ---------- */
+
+async function newMailbox(){
+  try{
+    // 1️⃣ Try 1secmail
+    const res = await fetch("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1");
+    const data = await res.json();
+    setMailbox(data[0], "1secmail");
+  }catch{
+    try{
+      // 2️⃣ Try mail.tm
+      await createMailTM();
+    }catch{
+      alert("All mail services are busy. Try again.");
+    }
+  }
+}
+
+function setMailbox(email, prov){
+  provider = prov;
+  document.getElementById("emailAddress").innerText = email;
+  login = email.split("@")[0];
+  domain = email.split("@")[1];
+  document.getElementById("messages").innerText = "No messages";
+}
+
+/* ---------- MAIL.TM ---------- */
+
+async function createMailTM(){
+  const domainRes = await fetch("https://api.mail.tm/domains");
+  const domainData = await domainRes.json();
+  const email = Math.random().toString(36).substring(2,10)+"@"+domainData["hydra:member"][0].domain;
+
+  await fetch("https://api.mail.tm/accounts",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ address:email, password:"12345678" })
+  });
+
+  const tokenRes = await fetch("https://api.mail.tm/token",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ address:email, password:"12345678" })
+  });
+  const tokenData = await tokenRes.json();
+  mailtmToken = tokenData.token;
+
+  provider = "mailtm";
+  document.getElementById("emailAddress").innerText = email;
+}
+
+/* ---------- INBOX ---------- */
+
+async function loadInbox(){
+  const box = document.getElementById("messages");
+  box.innerHTML = "Loading...";
+
+  if(provider === "1secmail"){
+    const res = await fetch(`https://www.1secmail.com/api/v1/?action=getMessages&login=${login}&domain=${domain}`);
+    const msgs = await res.json();
+    renderMessages(msgs, "1secmail");
+  }
+
+  if(provider === "mailtm"){
+    const res = await fetch("https://api.mail.tm/messages",{
+      headers:{ Authorization:`Bearer ${mailtmToken}` }
+    });
+    const data = await res.json();
+    renderMessages(data["hydra:member"], "mailtm");
+  }
+}
+
+function renderMessages(msgs, prov){
+  const box = document.getElementById("messages");
+  box.innerHTML = "";
+
+  if(!msgs || msgs.length===0){
+    box.innerText = "No messages";
+    return;
+  }
+
+  msgs.forEach(m=>{
+    const div = document.createElement("div");
+    div.className = "inbox-item";
+    div.innerHTML = `<b>${m.from?.address || m.from}</b><br>${m.subject}`;
+    div.onclick = ()=> readMessage(m.id, prov);
+    box.appendChild(div);
+  });
+}
+
+async function readMessage(id, prov){
+  if(prov==="1secmail"){
+    const res = await fetch(`https://www.1secmail.com/api/v1/?action=readMessage&login=${login}&domain=${domain}&id=${id}`);
+    const msg = await res.json();
+    alert(msg.textBody || msg.htmlBody);
+  }
+
+  if(prov==="mailtm"){
+    const res = await fetch(`https://api.mail.tm/messages/${id}`,{
+      headers:{ Authorization:`Bearer ${mailtmToken}` }
+    });
+    const msg = await res.json();
+    alert(msg.text || msg.html);
+  }
+}
+
+/* ---------- UI ---------- */
+
+function copyEmail(){
+  navigator.clipboard.writeText(document.getElementById("emailAddress").innerText);
+  alert("Copied");
+}
+function showEmail(){
+  emailScreen.classList.remove("hidden");
+  inboxScreen.classList.add("hidden");
+  setNav(0);
+}
+function showInbox(){
+  emailScreen.classList.add("hidden");
+  inboxScreen.classList.remove("hidden");
+  loadInbox();
+  setNav(1);
+}
+function setNav(i){
+  document.querySelectorAll(".nav-btn").forEach((b,x)=>b.classList.toggle("active",x===i));
+}
+function joinWhatsApp(){
+  location.href="https://chat.whatsapp.com/Jd7wg67a9myHb6S4MBgjGM";
+}
+
+newMailbox();
+</script>
+
+</body>
+</html>
